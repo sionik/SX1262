@@ -480,7 +480,7 @@ pub struct ClearDeviceErrors;
 
 impl Command for ClearDeviceErrors {
     type IdType = u8;
-    type CommandParameters = NoParameters;
+    type CommandParameters = [u8; 2];
     type ResponseParameters = NoParameters;
 
     fn id() -> Self::IdType {
@@ -488,7 +488,7 @@ impl Command for ClearDeviceErrors {
     }
 
     fn invoking_parameters(self) -> Self::CommandParameters {
-        NoParameters::default()
+        [0u8; 2]
     }
 }
 
