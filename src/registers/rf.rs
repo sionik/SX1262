@@ -32,23 +32,26 @@ pub struct RandomNumber {
 /// optimal modulation quality.
 ///
 /// # Important Notes
-/// - For LoRa® BW=500kHz: Set bw_500khz_opt to false
-/// - For all other LoRa® BWs and FSK: Set bw_500khz_opt to true
+/// - For LoRa® BW=500kHz: Set `do_optimize` to true
+/// - For all other LoRa® BWs and FSK: Set `do_optimize` to false
 /// - Must be configured before each packet transmission
 #[register(0x0889u16)]
 #[derive(Debug, Clone, Copy, ReadableRegister, WritableRegister)]
-pub struct TxModulation {
-    /// Enable bandwidth optimization
-    /// - false = Optimized for 500kHz bandwidth
-    /// - true = Optimized for other bandwidths (default)
-    pub bw_500khz_opt: bool,
+pub struct TxModulation(u8);
+
+impl TxModulation {
+    pub fn optimize_for_lora_bw_500khz(&mut self, do_optimize: bool) {
+        if do_optimize {
+            self.0 &= 0xFB;
+        } else {
+            self.0 |= 0x04;
+        }
+    }
 }
 
 impl Default for TxModulation {
     fn default() -> Self {
-        Self {
-            bw_500khz_opt: true,
-        }
+        Self(0x01)
     }
 }
 
@@ -183,9 +186,7 @@ impl FromByteArray for TxModulation {
     type Array = [u8; 1];
 
     fn from_bytes(bytes: Self::Array) -> Result<Self, Self::Error> {
-        Ok(Self {
-            bw_500khz_opt: bytes[0] & 0x04 != 0,
-        })
+        Ok(Self(bytes[0]))
     }
 }
 
@@ -194,7 +195,7 @@ impl ToByteArray for TxModulation {
     type Array = [u8; 1];
 
     fn to_bytes(self) -> Result<Self::Array, Self::Error> {
-        Ok([if self.bw_500khz_opt { 0x04 } else { 0x00 }])
+        Ok([self.0])
     }
 }
 
