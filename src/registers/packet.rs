@@ -154,11 +154,16 @@ pub struct BroadcastAddress {
 /// - Setting affects packet reception and network compatibility
 #[register(0x0736u16)]
 #[derive(Debug, Clone, Copy, ReadableRegister, WritableRegister, Default)]
-pub struct IqPolaritySetup {
-    /// IQ mode selection
-    /// - false = Standard IQ (default)
-    /// - true = Inverted IQ
-    pub inverted_iq: bool,
+pub struct IqPolaritySetup(u8);
+
+impl IqPolaritySetup {
+    pub fn optimize_for_inverted_iq(&mut self, inverted: bool) {
+        if inverted {
+            self.0 &= !0x04;
+        } else {
+            self.0 |= 0x04;
+        }
+    }
 }
 
 /// LoRa sync word register (address: 0x0740)
@@ -306,9 +311,7 @@ impl FromByteArray for IqPolaritySetup {
     type Array = [u8; 1];
 
     fn from_bytes(bytes: Self::Array) -> Result<Self, Self::Error> {
-        Ok(Self {
-            inverted_iq: bytes[0] & 0x01 != 0,
-        })
+        Ok(Self(bytes[0]))
     }
 }
 
@@ -317,7 +320,7 @@ impl ToByteArray for IqPolaritySetup {
     type Array = [u8; 1];
 
     fn to_bytes(self) -> Result<Self::Array, Self::Error> {
-        Ok([self.inverted_iq as u8])
+        Ok([self.0])
     }
 }
 
