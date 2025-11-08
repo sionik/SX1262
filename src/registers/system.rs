@@ -12,6 +12,59 @@ use core::convert::Infallible;
 
 use regiface::{register, FromByteArray, ReadableRegister, ToByteArray, WritableRegister};
 
+const MAX_RETENTION_ENTRIES: usize = 4;
+
+/// Retention register (address: 0x02F9)
+///
+/// Used to store addresses of registers whose values
+/// should be retained during sleep mode.
+///
+/// See chapter 9.6 of the datasheet.
+///
+/// # Important Notes
+/// - Up to 4 register addresses can be stored
+/// - Each entry is a 16-bit register address
+/// - The first byte indicates the number of valid entries
+#[regiface::register(0x02F9u16)]
+#[derive(Debug, Copy, Clone, ReadableRegister, WritableRegister, Default)]
+pub struct RetentionList {
+    /// Number of valid retention entries
+    /// - Max value: 4
+    pub n_entries: u8,
+    /// Retention register entries
+    pub entries: [u16; MAX_RETENTION_ENTRIES],
+}
+
+impl RetentionList {
+    /// Adds a register address to the retention list
+    pub fn add_entry(&mut self, reg_addr: u16) -> Result<(), ()> {
+        if (self.n_entries as usize) >= MAX_RETENTION_ENTRIES {
+            return Err(());
+        }
+        if self.entries.contains(&reg_addr) {
+            return Ok(());
+        }
+        self.entries[self.n_entries as usize] = reg_addr;
+        self.n_entries += 1;
+        Ok(())
+    }
+
+    pub fn remove_entry(&mut self, reg_addr: u16) -> Result<(), ()> {
+        for i in 0..(self.n_entries as usize) {
+            if self.entries[i] == reg_addr {
+                // Shift remaining entries down
+                for j in i..(self.n_entries as usize - 1) {
+                    self.entries[j] = self.entries[j + 1];
+                }
+                self.entries[self.n_entries as usize - 1] = 0;
+                self.n_entries -= 1;
+                return Ok(());
+            }
+        }
+        Err(())
+    }
+}
+
 /// RTC control register (address: 0x0902)
 ///
 /// Controls the 64kHz real-time clock used for:
@@ -112,6 +165,37 @@ pub struct EventMask {
     /// - 0 = Event masked (no interrupt)
     /// - 1 = Event enabled (generates interrupt)
     pub mask: u8,
+}
+
+impl FromByteArray for RetentionList {
+    type Error = Infallible;
+    type Array = [u8; 2 * MAX_RETENTION_ENTRIES + 1];
+
+    fn from_bytes(bytes: Self::Array) -> Result<Self, Self::Error> {
+        let n_entries = bytes[0];
+
+        let mut entries = [0u16; MAX_RETENTION_ENTRIES];
+        for i in 0..MAX_RETENTION_ENTRIES {
+            entries[i] = u16::from_be_bytes([bytes[2 * i + 1], bytes[2 * i + 2]]);
+        }
+        Ok(RetentionList { n_entries, entries })
+    }
+}
+
+impl ToByteArray for RetentionList {
+    type Error = Infallible;
+    type Array = [u8; 2 * MAX_RETENTION_ENTRIES + 1];
+
+    fn to_bytes(self) -> Result<Self::Array, Self::Error> {
+        let mut arr = Self::Array::default();
+        arr[0] = self.n_entries;
+        for (i, entry) in self.entries.iter().enumerate() {
+            let bytes = entry.to_be_bytes();
+            arr[2 * i + 1] = bytes[0];
+            arr[2 * i + 2] = bytes[1];
+        }
+        Ok(arr)
+    }
 }
 
 impl FromByteArray for RtcControl {
